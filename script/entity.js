@@ -16,11 +16,15 @@ export class Player {
         this.activeSkills = { jump: 0, dash: 0, shield: 0, slow: 0 };
         this.cooldowns = { jump: 0, dash: 0, shield: 0, blink: 0, slow: 0 };
         this.jumpHeight = 0;
+        this.collectedSkills = new Set();
     }
 
     isInvulnerable() {
         return this.activeSkills.jump > 0 || this.activeSkills.dash > 0 || this.activeSkills.shield > 0;
     }
+
+    hasSkill(id) { return this.collectedSkills.has(id); }
+    collectSkill(id) { this.collectedSkills.add(id); }
 
     setPath(path) {
         if (!path || path.length === 0) {

@@ -1,7 +1,8 @@
 import GameMap from './map.js';
 import { Player } from './entity.js';
-import { renderHUD, renderMinimap, renderStory, renderWin, renderPauseScreen, renderDeathScreen, renderMapSelectionScreen, renderSkillBar, ParticleSystem } from './ui.js';
+import { renderHUD, renderMinimap, renderStory, renderWin, renderPauseScreen, renderDeathScreen, renderMapSelectionScreen, renderSkillBar, renderSkillCollection, ParticleSystem } from './ui.js';
 import { TILE_SIZE, COLORS, TARGET_FPS, SKILLS } from './constants.js';
+import { TILE_FIRE, TILE_ARROW_TRAP } from './map.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -12,7 +13,7 @@ const MAP_W = 31, MAP_H = 31;
 let map = new GameMap(MAP_W, MAP_H);
 let player = new Player(map.startX, map.startY);
 const particles = new ParticleSystem();
-let messageLog = ["--- LABIRIN DIMULAI ---", "Arthur berjalan otomatis. Cari kunci, buka gerbang!"];
+let messageLog = ["--- LABIRIN DIMULAI ---", "Kumpulkan 4 skill dulu sebelum buka gerbang!"];
 
 const MAP_CONFIGS = [
     { name: "Labirin Pemula", width: 21, height: 21, obstacleDensity: 0.02, description: "Labirin kecil, sedikit jebakan." },
@@ -23,63 +24,131 @@ const MAP_CONFIGS = [
 ];
 let currentMapSelectionIndex = 0;
 
-let phase = 'TO_GATE';
-let statusText = 'Menuju gerbang...';
+let statusText = 'Mengumpulkan skill...';
 
+// --- AI PATH PLANNING ---
 function planNextPath() {
-    if (!map.keyTaken && !map.gateOpen) {
-        // 1. Coba cari jalan aman ke gerbang
-        let path = map.findPath(player.tileX, player.tileY, map.gateApproachX, map.gateApproachY, true, true);
-        
-        // 2. Jika tidak ada jalan aman, coba ambil kunci (aman)
-        if (!path || path.length <= 1) {
-            path = map.findPath(player.tileX, player.tileY, map.keyX, map.keyY, true, true);
+    const cs = player.collectedSkills;
+    const totalSkills = map.skillPickups.length;
+    const allSkills = cs.size >= totalSkills;
+
+    // Priority 1: collect remaining skill gems
+    const uncollected = map.skillPickups.filter(sp => !sp.collected);
+    if (uncollected.length > 0) {
+        let bestPath = null, bestSp = null, bestLen = Infinity;
+        for (const sp of uncollected) {
+            let p = map.findPath(player.tileX, player.tileY, sp.x, sp.y, true, true, cs);
+            if (!p || p.length <= 1) p = map.findPath(player.tileX, player.tileY, sp.x, sp.y, true, false, cs);
+            if (p && p.length > 1 && p.length < bestLen) {
+                bestLen = p.length; bestPath = p; bestSp = sp;
+            }
+        }
+        if (bestPath) {
+            statusText = `Ambil SKILL ${bestSp.skillId.toUpperCase()}... (${uncollected.length} tersisa)`;
+            player.setPath(bestPath);
+            return;
+        }
+    }
+
+    // Priority 2: get key
+    if (!map.keyTaken) {
+        let p = map.findPath(player.tileX, player.tileY, map.keyX, map.keyY, true, true, cs);
+        if (!p || p.length <= 1) p = map.findPath(player.tileX, player.tileY, map.keyX, map.keyY, true, false, cs);
+        if (p && p.length > 1) {
+            statusText = 'Mencari kunci...';
+            player.setPath(p);
+            return;
+        }
+    }
+
+    // Priority 3: open gate (requires all skills + key)
+    if (map.keyTaken && !map.gateOpen) {
+        if (!allSkills) {
+            // Still need skills — replanning will re-enter priority 1
+            const needed = totalSkills - cs.size;
+            statusText = `Butuh ${needed} skill lagi untuk buka gerbang!`;
+            return;
+        }
+        let p = map.findPath(player.tileX, player.tileY, map.gateX, map.gateY, false, true, cs);
+        if (!p || p.length <= 1) p = map.findPath(player.tileX, player.tileY, map.gateX, map.gateY, false, false, cs);
+        if (p && p.length > 1) {
+            statusText = 'Menuju gerbang...';
+            player.setPath(p);
+            return;
+        }
+    }
+
+    // Priority 4: exit
+    let p = map.findPath(player.tileX, player.tileY, map.exitX, map.exitY, true, true, cs);
+    if (!p || p.length <= 1) p = map.findPath(player.tileX, player.tileY, map.exitX, map.exitY, true, false, cs);
+    if (p && p.length > 1) {
+        statusText = 'Menuju keluar...';
+        player.setPath(p);
+    }
+}
+
+// --- AI AUTO-SKILL ACTIVATION ---
+function autoActivateSkills() {
+    if (gameState !== 'PLAYING' || !player.path || player.pathIndex >= player.path.length) return;
+
+    for (let i = player.pathIndex; i < Math.min(player.pathIndex + 3, player.path.length); i++) {
+        const [tx, ty] = player.path[i];
+        const tile = map.data[ty]?.[tx];
+        if (tile === undefined) continue;
+
+        if (tile === TILE_FIRE) {
+            if (player.hasSkill('jump') && player.cooldowns.jump <= 0) {
+                player.activeSkills.jump = SKILLS.JUMP.duration;
+                player.cooldowns.jump = SKILLS.JUMP.cd;
+                particles.addText("AUTO JUMP!", player.px + 32, player.py, '#2ecc71');
+                break;
+            }
+            if (player.hasSkill('shield') && player.cooldowns.shield <= 0) {
+                player.activeSkills.shield = SKILLS.SHIELD.duration;
+                player.cooldowns.shield = SKILLS.SHIELD.cd;
+                particles.addText("AUTO SHIELD!", player.px + 32, player.py, '#f1c40f');
+                break;
+            }
+            if (player.hasSkill('dash') && player.cooldowns.dash <= 0) {
+                player.activeSkills.dash = SKILLS.DASH.duration;
+                player.cooldowns.dash = SKILLS.DASH.cd;
+                particles.addText("AUTO DASH!", player.px + 32, player.py, '#3498db');
+                break;
+            }
         }
 
-        // 3. FALLBACK: Jika masih buntu karena jebakan, cari jalan apa saja (berisiko mati)
-        if (!path || path.length <= 1) {
-            path = map.findPath(player.tileX, player.tileY, map.keyX, map.keyY, true, false);
-        }
-
-        if (path) {
-            statusText = map.keyTaken ? 'Kembali ke gerbang...' : 'Mencari kunci...';
-            player.setPath(path);
-            return;
-        }
-    } else if (map.keyTaken && !map.gateOpen) {
-        // Ke gerbang untuk buka
-        let toGate = map.findPath(player.tileX, player.tileY, map.gateX, map.gateY, false, true);
-        if (!toGate) toGate = map.findPath(player.tileX, player.tileY, map.gateX, map.gateY, false, false);
-        if (toGate) {
-            phase = 'TO_GATE';
-            statusText = 'Kembali ke gerbang...';
-            player.setPath(toGate);
-            return;
-        }
-    } else {
-        let toExit = map.findPath(player.tileX, player.tileY, map.exitX, map.exitY, true, true);
-        if (!toExit) toExit = map.findPath(player.tileX, player.tileY, map.exitX, map.exitY, true, false);
-        if (toExit) {
-            phase = 'TO_EXIT';
-            statusText = 'Menuju keluar...';
-            player.setPath(toExit);
-            return;
+        if (tile === TILE_ARROW_TRAP) {
+            if (player.hasSkill('dash') && player.cooldowns.dash <= 0) {
+                player.activeSkills.dash = SKILLS.DASH.duration;
+                player.cooldowns.dash = SKILLS.DASH.cd;
+                particles.addText("AUTO DASH!", player.px + 32, player.py, '#3498db');
+                break;
+            }
+            if (player.hasSkill('shield') && player.cooldowns.shield <= 0) {
+                player.activeSkills.shield = SKILLS.SHIELD.duration;
+                player.cooldowns.shield = SKILLS.SHIELD.cd;
+                particles.addText("AUTO SHIELD!", player.px + 32, player.py, '#f1c40f');
+                break;
+            }
+            if (player.hasSkill('jump') && player.cooldowns.jump <= 0) {
+                player.activeSkills.jump = SKILLS.JUMP.duration;
+                player.cooldowns.jump = SKILLS.JUMP.cd;
+                particles.addText("AUTO JUMP!", player.px + 32, player.py, '#2ecc71');
+                break;
+            }
         }
     }
 }
 
-function initialPlan() { planNextPath(); }
-// initialPlan is now called by createNewGame, not at global scope
-
 let camX = player.px - canvas.width / 2;
 let camY = player.py - canvas.height / 2;
 
-let gameState = 'MAP_SELECT'; // Initial game state is now map selection
+let gameState = 'MAP_SELECT';
 const storyLines = [
     "Labirin kuno ini menelan banyak penjelajah...",
     "Aku akan berjalan sendiri — kakiku tahu jalannya.",
     "Tapi gerbang besi di tengah menutup jalan keluar.",
-    "Harus kembali, cari kunci, lalu kembali lagi ke gerbang.",
+    "Cari 4 skill dulu, baru bisa buka gerbang!",
     "Mulai!"
 ];
 let currentStoryIndex = 0;
@@ -91,19 +160,63 @@ const keys = {};
 function createNewGame(mapConfig) {
     map = new GameMap(mapConfig.width, mapConfig.height, mapConfig.obstacleDensity);
     player = new Player(map.startX, map.startY);
-    messageLog = ["--- LABIRIN DIMULAI ---", "Arthur berjalan otomatis. Cari kunci, buka gerbang!"];
-    phase = 'TO_GATE';
-    statusText = 'Menuju gerbang...';
-    initialPlan();
+    messageLog = ["--- LABIRIN DIMULAI ---", `Kumpulkan ${map.skillPickups.length} skill untuk buka gerbang!`];
+    statusText = 'Mengumpulkan skill...';
+    planNextPath();
     camX = player.px - canvas.width / 2;
     camY = player.py - canvas.height / 2;
-    currentStoryIndex = 0; // Reset story for new game
-    storyCharIndex = 0;    // Reset story for new game
-    spacePressed = false;  // Reset for new game
+    currentStoryIndex = 0;
+    storyCharIndex = 0;
+    spacePressed = false;
 }
 
 function resetGame() {
     createNewGame(MAP_CONFIGS[currentMapSelectionIndex]);
+}
+
+function onTileEntered(tx, ty) {
+    if (map.isLethal(tx, ty) && !player.isInvulnerable()) {
+        gameState = 'DEAD';
+        messageLog.push("Arthur terkena jebakan!");
+        particles.addText("MATI!", player.px + TILE_SIZE / 2, player.py, '#e74c3c');
+        return;
+    }
+
+    // Skill pickup
+    const skillId = map.pickupSkill(tx, ty);
+    if (skillId) {
+        player.collectSkill(skillId);
+        const SKILL_COLORS = { jump: '#2ecc71', dash: '#3498db', shield: '#f1c40f', blink: '#9b59b6' };
+        const remaining = map.skillPickups.filter(s => !s.collected).length;
+        messageLog.push(`Skill ${skillId.toUpperCase()} didapat! (${remaining} tersisa)`);
+        particles.addText(`${skillId.toUpperCase()}!`, player.px + TILE_SIZE / 2, player.py - 20, SKILL_COLORS[skillId] || '#fff');
+        planNextPath();
+        return;
+    }
+
+    if (map.pickUpKey(tx, ty)) {
+        messageLog.push("Kunci didapat! Kembali ke gerbang.");
+        particles.addText("KUNCI!", player.px + TILE_SIZE / 2, player.py, '#f1c40f');
+        planNextPath();
+    } else if (tx === map.gateX && ty === map.gateY && map.keyTaken && !map.gateOpen) {
+        const allReady = player.collectedSkills.size >= map.skillPickups.length;
+        if (map.tryOpenGate(tx, ty, allReady)) {
+            messageLog.push("Gerbang terbuka!");
+            particles.addText("TERBUKA!", player.px + TILE_SIZE / 2, player.py, '#2ecc71');
+            planNextPath();
+        } else {
+            const needed = map.skillPickups.length - player.collectedSkills.size;
+            messageLog.push(`Gerbang butuh ${needed} skill lagi!`);
+            statusText = `Skill kurang ${needed}!`;
+            planNextPath();
+        }
+    } else if (map.isExit(tx, ty)) {
+        if (gameState === 'PLAYING') {
+            gameState = 'WIN';
+            winTimer = 0;
+            messageLog.push("Sampai di EXIT!");
+        }
+    }
 }
 
 function handleKeyDown(key) {
@@ -118,39 +231,38 @@ function handleKeyDown(key) {
         } else if (key === 'ArrowRight' || key === 'ArrowDown') {
             currentMapSelectionIndex = Math.min(MAP_CONFIGS.length - 1, currentMapSelectionIndex + 1);
         } else if (key === 'Enter' || key === ' ') {
-            if (!spacePressed) { // Prevent multiple triggers on hold
+            if (!spacePressed) {
                 spacePressed = true;
                 createNewGame(MAP_CONFIGS[currentMapSelectionIndex]);
-                gameState = 'STORY'; // Start story after map selection
+                gameState = 'STORY';
             }
         }
-        return; // Don't process other keys in map select state
+        return;
     }
     if (gameState === 'DEAD' && key.toLowerCase() === 'r') {
         resetGame();
-        gameState = 'MAP_SELECT'; // Go back to map selection after death
+        gameState = 'MAP_SELECT';
         return;
     }
 
-    // Manual Skill Handling
+    // Manual skill override (only if collected)
     if (gameState === 'PLAYING') {
-        if (key === '1' && player.cooldowns.jump <= 0) {
+        if (key === '1' && player.hasSkill('jump') && player.cooldowns.jump <= 0) {
             player.activeSkills.jump = SKILLS.JUMP.duration;
             player.cooldowns.jump = SKILLS.JUMP.cd;
-            particles.addText("JUMP!", player.px + 32, player.py, '#fff');
+            particles.addText("JUMP!", player.px + 32, player.py, '#2ecc71');
         }
-        if (key === '2' && player.cooldowns.dash <= 0) {
+        if (key === '2' && player.hasSkill('dash') && player.cooldowns.dash <= 0) {
             player.activeSkills.dash = SKILLS.DASH.duration;
             player.cooldowns.dash = SKILLS.DASH.cd;
             particles.addText("DASH!", player.px + 32, player.py, '#3498db');
         }
-        if (key === '3' && player.cooldowns.shield <= 0) {
+        if (key === '3' && player.hasSkill('shield') && player.cooldowns.shield <= 0) {
             player.activeSkills.shield = SKILLS.SHIELD.duration;
             player.cooldowns.shield = SKILLS.SHIELD.cd;
             particles.addText("SHIELD!", player.px + 32, player.py, '#f1c40f');
         }
-        if (key === '4' && player.cooldowns.blink <= 0) {
-            // Blink 2 tiles forward on current path
+        if (key === '4' && player.hasSkill('blink') && player.cooldowns.blink <= 0) {
             const targetIdx = Math.min(player.pathIndex + 2, player.path.length - 1);
             if (player.path[targetIdx]) {
                 const [tx, ty] = player.path[targetIdx];
@@ -179,14 +291,14 @@ function handleKeyDown(key) {
                 currentStoryIndex++; storyCharIndex = 0;
                 if (currentStoryIndex >= storyLines.length) {
                     gameState = 'PLAYING';
-                    planNextPath(); // Paksa Arthur jalan setelah cerita selesai
+                    planNextPath();
                 }
             }
         }
     }
-    if ((gameState === 'WIN' || gameState === 'PAUSED') && key.toLowerCase() === 'r') { // Allow restart from WIN or PAUSED
-        resetGame(); // This will create a new game with the *currently selected* map config
-        gameState = 'MAP_SELECT'; // Go back to map selection after win
+    if ((gameState === 'WIN' || gameState === 'PAUSED') && key.toLowerCase() === 'r') {
+        resetGame();
+        gameState = 'MAP_SELECT';
     }
 }
 
@@ -208,43 +320,15 @@ const FRAME_TARGET_MS = 1000 / TARGET_FPS;
 let fpsFrames = 0;
 let fpsLastUpdate = performance.now();
 let fpsCurrent = 0;
-
 let winTimer = 0;
-
-let deathTimer = 0; // New timer for death screen
-
-function onTileEntered(tx, ty) {
-    if (map.isLethal(tx, ty) && !player.isInvulnerable()) {
-        gameState = 'DEAD';
-        messageLog.push("Arthur terkena jebakan!");
-        particles.addText("MATI!", player.px + TILE_SIZE / 2, player.py, '#e74c3c');
-        return; // Stop further processing for this tile
-    }
-
-    if (map.pickUpKey(tx, ty)) {
-        messageLog.push("Kunci didapat! Kembali ke gerbang.");
-        particles.addText("KUNCI!", player.px + TILE_SIZE / 2, player.py, '#f1c40f');
-        planNextPath();
-    } else if (tx === map.gateX && ty === map.gateY && map.gateOpen) {
-        // already open, keep going
-    } else if (map.tryOpenGate(tx, ty)) {
-        messageLog.push("Gerbang terbuka!");
-        particles.addText("TERBUKA!", player.px + TILE_SIZE / 2, player.py, '#2ecc71');
-        planNextPath();
-    } else if (map.isExit(tx, ty)) {
-        if (gameState === 'PLAYING') {
-            gameState = 'WIN';
-            winTimer = 0;
-            messageLog.push("Sampai di EXIT!");
-        }
-    }
-}
+let deathTimer = 0;
 
 function update(dt) {
     if (gameState !== 'PLAYING') return;
-    
-    // Adjust dt if Time Slow is active
+
     const effectiveDt = player.activeSkills.slow > 0 ? dt * 0.4 : dt;
+
+    autoActivateSkills();
 
     const prevTileX = player.tileX, prevTileY = player.tileY;
     player.update(effectiveDt);
@@ -253,16 +337,7 @@ function update(dt) {
     }
 
     if (player.pathIndex >= player.path.length && gameState === 'PLAYING') {
-        if (phase === 'TO_GATE' && !map.keyTaken) {
-            messageLog.push("Gerbang terkunci! Backtrack ke kunci.");
-            statusText = 'Gerbang terkunci!';
-            const toKey = map.findPath(player.tileX, player.tileY, map.keyX, map.keyY, true, true); // avoidLethal
-            if (toKey) {
-                phase = 'TO_KEY';
-                statusText = 'Backtrack: ambil kunci...';
-                player.setPath(toKey);
-            }
-        } else if (!map.isExit(player.tileX, player.tileY)) {
+        if (!map.isExit(player.tileX, player.tileY)) {
             planNextPath();
         }
     }
@@ -291,7 +366,7 @@ function gameLoop() {
     } else if (gameState === 'WIN') {
         winTimer += dt;
     } else if (gameState === 'DEAD') {
-        deathTimer += dt; // Update death timer for potential animation
+        deathTimer += dt;
     }
 
     camX += (player.px - canvas.width / 2 - camX) * 0.1;
@@ -331,9 +406,9 @@ function gameLoop() {
     } else {
         renderHUD(ctx, player, map, canvas.width, canvas.height, messageLog, statusText);
         renderMinimap(ctx, map, player, canvas.width, canvas.height);
-        if (gameState === 'PAUSED') {
-            renderPauseScreen(ctx, canvas.width, canvas.height);
-        }
+        renderSkillCollection(ctx, player, canvas.width, canvas.height, map.skillPickups.length);
+        renderSkillBar(ctx, player, canvas.width, canvas.height);
+        if (gameState === 'PAUSED') renderPauseScreen(ctx, canvas.width, canvas.height);
     }
 
     ctx.font = '18px "VT323", monospace';
@@ -349,4 +424,4 @@ function gameLoop() {
     setTimeout(gameLoop, delay);
 }
 
-gameLoop(); // Start the game loop, which will begin in MAP_SELECT state
+gameLoop();
