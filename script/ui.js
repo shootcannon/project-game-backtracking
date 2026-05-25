@@ -1,12 +1,20 @@
-import { COLORS, SKILLS } from './constants.js';
-import { TILE_KEY, TILE_GATE, TILE_EXIT, TILE_WALL, TILE_FIRE, TILE_ARROW_TRAP, TILE_SKILL_JUMP, TILE_SKILL_DASH, TILE_SKILL_SHIELD, TILE_SKILL_BLINK } from './map.js';
+import { COLORS, SKILLS, SKILL_COUNT } from './constants.js';
+import { TILE_KEY, TILE_GATE, TILE_EXIT, TILE_WALL, TILE_FIRE, TILE_ARROW_TRAP, TILE_MINE } from './map.js';
 
-export function renderHUD(ctx, player, map, canvasWidth, canvasHeight, messageLog, statusText) {
+export function formatRunTime(ms) {
+    const sec = ms / 1000;
+    if (sec < 60) return `${sec.toFixed(2)} detik`;
+    const m = Math.floor(sec / 60);
+    const s = (sec % 60).toFixed(1);
+    return `${m} menit ${s} detik`;
+}
+
+export function renderHUD(ctx, player, map, canvasWidth, canvasHeight, messageLog, statusText, runElapsedMs) {
     ctx.font = '20px "VT323", monospace';
     const padding = 20;
 
     ctx.fillStyle = 'rgba(20, 20, 25, 0.75)';
-    ctx.beginPath(); ctx.roundRect(padding, padding, 300, 60, 8); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(padding, padding, 340, 84, 8); ctx.fill();
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; ctx.lineWidth = 2; ctx.stroke();
 
     ctx.fillStyle = COLORS.UI_TEXT;
@@ -15,6 +23,8 @@ export function renderHUD(ctx, player, map, canvasWidth, canvasHeight, messageLo
     ctx.fillText(`Kunci: ${map.keyTaken ? 'DIMILIKI' : 'BELUM'}`, padding + 15, padding + 50);
     ctx.fillStyle = map.gateOpen ? '#2ecc71' : '#e67e22';
     ctx.fillText(`Gerbang: ${map.gateOpen ? 'TERBUKA' : 'TERKUNCI'}`, padding + 150, padding + 50);
+    ctx.fillStyle = '#f1c40f';
+    ctx.fillText(`Waktu AI: ${formatRunTime(runElapsedMs)}`, padding + 15, padding + 74);
 
     const logCount = 4;
     const logHeight = logCount * 22 + 16;
@@ -71,17 +81,11 @@ export function renderMinimap(ctx, map, player, canvasWidth, canvasHeight) {
                 } else if (t === TILE_ARROW_TRAP) {
                     ctx.fillStyle = '#34495e';
                     ctx.fillRect(px + 1, py + 1, cell - 2, cell - 2);
-                } else if (t === TILE_SKILL_JUMP) {
-                    ctx.fillStyle = '#2ecc71';
+                } else if (t === TILE_MINE) {
+                    ctx.fillStyle = '#2c3e50';
                     ctx.fillRect(px + 1, py + 1, cell - 2, cell - 2);
-                } else if (t === TILE_SKILL_DASH) {
-                    ctx.fillStyle = '#3498db';
-                    ctx.fillRect(px + 1, py + 1, cell - 2, cell - 2);
-                } else if (t === TILE_SKILL_SHIELD) {
-                    ctx.fillStyle = '#f1c40f';
-                    ctx.fillRect(px + 1, py + 1, cell - 2, cell - 2);
-                } else if (t === TILE_SKILL_BLINK) {
-                    ctx.fillStyle = '#9b59b6';
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.fillRect(px + 2, py + 2, cell - 4, cell - 4);
                     ctx.fillRect(px + 1, py + 1, cell - 2, cell - 2);
                 }
             }
@@ -115,7 +119,7 @@ export function renderStory(ctx, canvasWidth, canvasHeight, text, time) {
     }
 }
 
-export function renderWin(ctx, canvasWidth, canvasHeight, alpha) {
+export function renderWin(ctx, canvasWidth, canvasHeight, alpha, runElapsedMs) {
     ctx.fillStyle = `rgba(5, 20, 10, ${alpha * 0.85})`;
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
@@ -124,16 +128,20 @@ export function renderWin(ctx, canvasWidth, canvasHeight, alpha) {
     ctx.scale(Math.min(1, alpha * 2), Math.min(1, alpha * 2));
     ctx.fillStyle = '#0a1f12';
     ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.roundRect(-220, -100, 440, 200, 10); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(-240, -115, 480, 230, 10); ctx.fill(); ctx.stroke();
     ctx.font = 'bold 40px "VT323", monospace';
     ctx.fillStyle = '#2ecc71';
     ctx.textAlign = 'center';
-    ctx.fillText("LABIRIN DITAKLUKKAN!", 0, -30);
+    ctx.fillText("LABIRIN DITAKLUKKAN!", 0, -45);
     ctx.font = '24px "VT323", monospace';
     ctx.fillStyle = '#ecf0f1';
-    ctx.fillText("Arthur menemukan jalan keluar.", 0, 10);
+    ctx.fillText("Arthur menemukan jalan keluar.", 0, -5);
     ctx.fillStyle = '#f1c40f';
-    if (Math.floor(Date.now() / 500) % 2 === 0) ctx.fillText("▼ Tekan [R] untuk Labirin Baru ▼", 0, 65);
+    ctx.font = 'bold 28px "VT323", monospace';
+    ctx.fillText(`Waktu: ${formatRunTime(runElapsedMs)}`, 0, 35);
+    ctx.font = '22px "VT323", monospace';
+    ctx.fillStyle = '#aaa';
+    if (Math.floor(Date.now() / 500) % 2 === 0) ctx.fillText("▼ Tekan [R] untuk Labirin Baru ▼", 0, 80);
     ctx.restore();
     ctx.textAlign = 'left';
 }
@@ -151,24 +159,27 @@ export function renderPauseScreen(ctx, canvasWidth, canvasHeight) {
     ctx.textAlign = 'left';
 }
 
-export function renderDeathScreen(ctx, canvasWidth, canvasHeight) {
-    ctx.fillStyle = 'rgba(50, 0, 0, 0.85)'; // Dark red overlay
+export function renderDeathScreen(ctx, canvasWidth, canvasHeight, runElapsedMs) {
+    ctx.fillStyle = 'rgba(50, 0, 0, 0.85)';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
     ctx.save();
     ctx.translate(canvasWidth / 2, canvasHeight / 2);
-    ctx.fillStyle = '#1f0000'; // Darker red background for box
-    ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 4; // Red border
-    ctx.beginPath(); ctx.roundRect(-220, -100, 440, 200, 10); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#1f0000';
+    ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.roundRect(-240, -115, 480, 230, 10); ctx.fill(); ctx.stroke();
     ctx.font = 'bold 40px "VT323", monospace';
-    ctx.fillStyle = '#e74c3c'; // Red text
+    ctx.fillStyle = '#e74c3c';
     ctx.textAlign = 'center';
-    ctx.fillText("ANDA MATI!", 0, -30);
+    ctx.fillText("ANDA MATI!", 0, -45);
     ctx.font = '24px "VT323", monospace';
-    ctx.fillStyle = '#ecf0f1'; // Light text
-    ctx.fillText("Arthur tidak menemukan jalan keluar.", 0, 10);
-    ctx.fillStyle = '#f1c40f'; // Yellow text for prompt
-    if (Math.floor(Date.now() / 500) % 2 === 0) ctx.fillText("▼ Tekan [R] untuk Pilih Labirin Baru ▼", 0, 65);
+    ctx.fillStyle = '#ecf0f1';
+    ctx.fillText("Arthur tidak menemukan jalan keluar.", 0, 0);
+    ctx.fillStyle = '#f1c40f';
+    ctx.font = '22px "VT323", monospace';
+    ctx.fillText(`Waktu: ${formatRunTime(runElapsedMs)}`, 0, 32);
+    ctx.font = '22px "VT323", monospace';
+    if (Math.floor(Date.now() / 500) % 2 === 0) ctx.fillText("▼ Tekan [R] untuk Pilih Labirin Baru ▼", 0, 72);
     ctx.restore();
     ctx.textAlign = 'left';
 }
@@ -184,11 +195,11 @@ export function renderMapSelectionScreen(ctx, canvasWidth, canvasHeight, mapConf
 
     mapConfigs.forEach((config, index) => {
         const isSelected = index === currentMapIndex;
-        ctx.fillStyle = isSelected ? '#2ecc71' : '#ecf0f1'; // Highlight selected map
+        ctx.fillStyle = isSelected ? '#2ecc71' : '#ecf0f1';
         ctx.font = isSelected ? 'bold 36px "VT323", monospace' : '32px "VT323", monospace';
         ctx.fillText(`${isSelected ? '> ' : ''}${config.name}${isSelected ? ' <' : ''}`, canvasWidth / 2, canvasHeight / 2 - 50 + (index * 50));
         ctx.font = '20px "VT323", monospace';
-        ctx.fillStyle = isSelected ? '#aaffaa' : '#aaa'; // Description color
+        ctx.fillStyle = isSelected ? '#aaffaa' : '#aaa';
         ctx.fillText(config.description, canvasWidth / 2, canvasHeight / 2 - 25 + (index * 50));
     });
 
@@ -199,7 +210,7 @@ export function renderMapSelectionScreen(ctx, canvasWidth, canvasHeight, mapConf
 }
 
 export function renderSkillBar(ctx, player, canvasWidth, canvasHeight) {
-    const SKILL_COLORS = { jump: '#2ecc71', dash: '#3498db', shield: '#f1c40f', blink: '#9b59b6', slow: '#aaffaa' };
+    const SKILL_COLORS = { jump: '#2ecc71', blink: '#9b59b6', shield: '#f1c40f' };
     const skillKeys = Object.values(SKILLS);
     const w = 60, h = 60, gap = 15;
     const totalW = (w + gap) * skillKeys.length - gap;
@@ -207,7 +218,7 @@ export function renderSkillBar(ctx, player, canvasWidth, canvasHeight) {
     const y = canvasHeight - 90;
 
     skillKeys.forEach((skill) => {
-        const collected = player.collectedSkills.has(skill.id) || skill.id === 'slow';
+        const collected = player.collectedSkills.has(skill.id);
         const cd = player.cooldowns[skill.id] || 0;
         const maxCd = skill.cd;
         const ratio = cd / maxCd;
@@ -228,7 +239,6 @@ export function renderSkillBar(ctx, player, canvasWidth, canvasHeight) {
         }
 
         if (!collected) {
-            // Lock icon
             ctx.fillStyle = '#333';
             ctx.font = 'bold 22px "VT323", monospace';
             ctx.textAlign = 'center';
@@ -248,10 +258,9 @@ export function renderSkillBar(ctx, player, canvasWidth, canvasHeight) {
     ctx.textAlign = 'left';
 }
 
-export function renderSkillCollection(ctx, player, canvasWidth, canvasHeight, totalSkills) {
+export function renderSkillCollection(ctx, player, canvasWidth, canvasHeight) {
     const SKILL_DEFS = [
         { id: 'jump',   label: 'JUMP',   r: 46,  g: 204, b: 113 },
-        { id: 'dash',   label: 'DASH',   r: 52,  g: 152, b: 219 },
         { id: 'shield', label: 'SHIELD', r: 241, g: 196, b: 15  },
         { id: 'blink',  label: 'BLINK',  r: 155, g: 89,  b: 182 }
     ];
@@ -262,19 +271,15 @@ export function renderSkillCollection(ctx, player, canvasWidth, canvasHeight, to
     const panelX = Math.floor((canvasWidth - panelW) / 2);
     const panelY = 16;
 
-    // Panel background
     ctx.fillStyle = 'rgba(8, 8, 14, 0.82)';
     ctx.beginPath(); ctx.roundRect(panelX - 4, panelY - 4, panelW + 8, panelH + 8, 8); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; ctx.stroke();
-
-    const collected = player.collectedSkills.size;
 
     SKILL_DEFS.forEach((sk, i) => {
         const has = player.collectedSkills.has(sk.id);
         const x = panelX + 12 + i * (itemW + gap);
         const y = panelY + 4;
 
-        // Gem background box
         ctx.fillStyle = has
             ? `rgba(${sk.r},${sk.g},${sk.b},0.18)`
             : 'rgba(30,30,38,0.9)';
@@ -284,7 +289,6 @@ export function renderSkillCollection(ctx, player, canvasWidth, canvasHeight, to
         ctx.stroke();
 
         if (has) {
-            // Draw mini diamond gem
             const cx = x + itemW / 2, cy = y + itemH / 2 - 4;
             const gs = 14;
             ctx.beginPath();
@@ -298,7 +302,6 @@ export function renderSkillCollection(ctx, player, canvasWidth, canvasHeight, to
             ctx.strokeStyle = 'rgba(255,255,255,0.6)';
             ctx.lineWidth = 1.2;
             ctx.stroke();
-            // Highlight
             ctx.beginPath();
             ctx.moveTo(cx, cy - gs * 0.72);
             ctx.lineTo(cx + gs * 0.36, cy - gs * 0.05);
@@ -308,7 +311,6 @@ export function renderSkillCollection(ctx, player, canvasWidth, canvasHeight, to
             ctx.fillStyle = 'rgba(255,255,255,0.28)';
             ctx.fill();
         } else {
-            // Dim lock placeholder
             const cx = x + itemW / 2, cy = y + itemH / 2 - 4;
             ctx.strokeStyle = '#2a2a36'; ctx.lineWidth = 1.5;
             ctx.beginPath();
@@ -320,18 +322,16 @@ export function renderSkillCollection(ctx, player, canvasWidth, canvasHeight, to
             ctx.stroke();
         }
 
-        // Label
         ctx.font = 'bold 11px "VT323", monospace';
         ctx.textAlign = 'center';
         ctx.fillStyle = has ? `rgb(${sk.r},${sk.g},${sk.b})` : '#333';
         ctx.fillText(sk.label, x + itemW / 2, y + itemH - 2);
     });
 
-    // Progress label
     ctx.font = '14px "VT323", monospace';
     ctx.textAlign = 'center';
-    ctx.fillStyle = collected >= totalSkills ? '#2ecc71' : '#f1c40f';
-    ctx.fillText(`${collected}/${totalSkills} SKILL`, canvasWidth / 2, panelY + panelH + 6);
+    ctx.fillStyle = '#2ecc71';
+    ctx.fillText(`${SKILL_COUNT} SKILL SIAP`, canvasWidth / 2, panelY + panelH + 6);
     ctx.textAlign = 'left';
 }
 

@@ -21,9 +21,9 @@ export const COLORS = {
 };
 
 export const SKILLS = {
-    JUMP: { id: 'jump', key: '1', cd: 2000, duration: 600 },
-    DASH: { id: 'dash', key: '2', cd: 4000, duration: 400 },
-    SHIELD: { id: 'shield', key: '3', cd: 8000, duration: 2000 },
-    BLINK: { id: 'blink', key: '4', cd: 5000 },
-    SLOW: { id: 'slow', key: '5', cd: 12000, duration: 3000 }
+    JUMP: { id: 'jump', key: '1', cd: 2000, duration: 450 },
+    BLINK: { id: 'blink', key: '2', cd: 4000, duration: 350 },
+    SHIELD: { id: 'shield', key: '3', cd: 6000, duration: 2800 },
 };
+
+export const SKILL_COUNT = Object.keys(SKILLS).length;

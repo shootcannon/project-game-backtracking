@@ -8,19 +8,21 @@ export class Player {
         this.py = y * TILE_SIZE;
         this.facingRight = true;
         this.speed = 180;
+        this.moveSpeedMult = 1;
         this.path = [];
         this.pathIndex = 0;
         this.isMoving = false;
 
-        // Skill States
-        this.activeSkills = { jump: 0, dash: 0, shield: 0, slow: 0 };
-        this.cooldowns = { jump: 0, dash: 0, shield: 0, blink: 0, slow: 0 };
+        this.activeSkills = { jump: 0, blink: 0, shield: 0 };
+        this.cooldowns = { jump: 0, blink: 0, shield: 0 };
         this.jumpHeight = 0;
-        this.collectedSkills = new Set();
+        this.collectedSkills = new Set(['jump', 'blink', 'shield']);
     }
 
     isInvulnerable() {
-        return this.activeSkills.jump > 0 || this.activeSkills.dash > 0 || this.activeSkills.shield > 0;
+        return this.activeSkills.shield > 0
+            || this.activeSkills.jump > 0
+            || this.activeSkills.blink > 0;
     }
 
     hasSkill(id) { return this.collectedSkills.has(id); }
@@ -46,7 +48,6 @@ export class Player {
     }
 
     update(dt) {
-        // Update Skill Timers
         Object.keys(this.activeSkills).forEach(k => {
             if (this.activeSkills[k] > 0) this.activeSkills[k] -= dt;
         });
@@ -54,7 +55,6 @@ export class Player {
             if (this.cooldowns[k] > 0) this.cooldowns[k] -= dt;
         });
 
-        // Jump Animation Logic
         if (this.activeSkills.jump > 0) {
             const progress = 1 - (this.activeSkills.jump / SKILLS.JUMP.duration);
             this.jumpHeight = Math.sin(progress * Math.PI) * 40;
@@ -62,7 +62,9 @@ export class Player {
             this.jumpHeight = 0;
         }
 
-        const currentSpeed = this.activeSkills.dash > 0 ? this.speed * 2.5 : this.speed;
+        let currentSpeed = this.speed * (this.moveSpeedMult ?? 1);
+        if (this.activeSkills.blink > 0) currentSpeed = this.speed * 4;
+        else if (this.activeSkills.jump > 0) currentSpeed = this.speed * 2;
 
         const target = this.currentTargetTile();
         if (!target) {
@@ -113,19 +115,10 @@ export class Player {
         const bob = isWalking ? Math.abs(Math.sin(time / 110)) * 2.5 : Math.sin(time / 700) * 1.2;
         const breath = Math.sin(time / 800) * 0.6;
         
-        // Apply Jump Height
         const jumpOff = this.jumpHeight;
 
         const cx = this.px + TILE_SIZE / 2;
         const cy = this.py + TILE_SIZE / 2 - bob - jumpOff;
-
-        // Dash Ghosting Effect
-        if (this.activeSkills.dash > 0) {
-            ctx.globalAlpha = 0.4;
-            ctx.fillStyle = '#3498db';
-            ctx.fillRect(this.px + 10, this.py + 10, TILE_SIZE - 20, TILE_SIZE - 20);
-            ctx.globalAlpha = 1.0;
-        }
 
         ctx.fillStyle = 'rgba(0,0,0,0.45)';
         ctx.beginPath();
@@ -136,7 +129,6 @@ export class Player {
         ctx.translate(cx, cy);
         if (!this.facingRight) ctx.scale(-1, 1);
 
-        // Shield Effect
         if (this.activeSkills.shield > 0) {
             ctx.beginPath();
             ctx.arc(0, -10, 35, 0, Math.PI * 2);
