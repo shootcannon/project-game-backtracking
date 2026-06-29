@@ -1,3 +1,11 @@
+
+
+
+
+
+
+
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
@@ -5,13 +13,16 @@ import java.awt.geom.*;
 import java.util.*;
 import java.util.List;
 
+
 public class ArthurGame extends JFrame {
+    
     private static final List<MapConfig> MAP_CONFIGS = Arrays.asList(
         new MapConfig("Easy Maze", 17, 17, 0.04, "Map kecil, rintangan jarang."),
         new MapConfig("Medium Maze", 27, 27, 0.07, "Tantangan mulai terasa."),
         new MapConfig("Hard Maze", 37, 37, 0.12, "Banyak ranjau dan area panah!")
     );
 
+    
     private int currentMapSelectionIndex = 0;
     private MapConfig currentMapConfig = MAP_CONFIGS.get(0);
     private GameMap map;
@@ -21,8 +32,9 @@ public class ArthurGame extends JFrame {
     private String statusText = "AI mencari jalan keluar...";
     private double runElapsedMs = 0;
     private Double finalRunTimeMs = null;
-    private String gameState = "MAP_SELECT";
+    private String gameState = "MAP_SELECT"; 
 
+    
     private final List<String> storyLines = Arrays.asList(
         "Labirin kuno ini menelan banyak penjelajah...",
         "Aku akan berjalan sendiri - kakiku tahu jalannya.",
@@ -37,27 +49,34 @@ public class ArthurGame extends JFrame {
     private double winTimer = 0;
     private double deathTimer = 0;
 
+    
     private double camX = 0;
     private double camY = 0;
+    
+    
     private int fpsCurrent = 0;
     private int fpsFrames = 0;
     private long fpsLastUpdate = System.currentTimeMillis();
 
     private final GamePanel gamePanel;
-    private boolean running = true;
+    private boolean running = true; 
 
+    
     public ArthurGame() {
-        setTitle("Arthur - Labirin Kuno");
+        setTitle("Arthur - Labirin Kuno (Project Akhir PBO)");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1200, 800);
-        setLocationRelativeTo(null);
+        setLocationRelativeTo(null); 
 
+        
         map = new GameMap(currentMapConfig.width, currentMapConfig.height, currentMapConfig.obstacleDensity);
         player = new Player(map.startX, map.startY);
 
+        
         gamePanel = new GamePanel();
         add(gamePanel);
 
+        
         addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
@@ -69,6 +88,7 @@ public class ArthurGame extends JFrame {
             }
         });
 
+        
         addComponentListener(new ComponentAdapter() {
             @Override
             public void componentResized(ComponentEvent e) {
@@ -77,20 +97,23 @@ public class ArthurGame extends JFrame {
             }
         });
 
+        
         messageLog.add("--- LABIRIN DIMULAI ---");
         messageLog.add("3 skill siap - cari kunci lalu keluar!");
 
+        
         runGameLoop();
     }
 
+    
     private void runGameLoop() {
         Thread thread = new Thread(() -> {
             long lastTime = System.nanoTime();
             while (running) {
                 long now = System.nanoTime();
-                double dt = (now - lastTime) / 1000000.0;
+                double dt = (now - lastTime) / 1000000.0; 
                 lastTime = now;
-                if (dt > 100.0) dt = 100.0;
+                if (dt > 100.0) dt = 100.0; 
 
                 long timeMs = System.currentTimeMillis();
                 fpsFrames++;
@@ -100,17 +123,20 @@ public class ArthurGame extends JFrame {
                     fpsLastUpdate = timeMs;
                 }
 
+                
                 updateGame(dt);
 
+                
                 SwingUtilities.invokeLater(() -> gamePanel.repaint());
 
+                
                 try {
                     long elapsed = (System.nanoTime() - now) / 1000000;
                     long sleepTime = (1000 / Constants.TARGET_FPS) - elapsed;
                     if (sleepTime > 0) {
                         Thread.sleep(sleepTime);
                     } else {
-                        Thread.sleep(1);
+                        Thread.sleep(1); 
                     }
                 } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();
@@ -118,20 +144,26 @@ public class ArthurGame extends JFrame {
                 }
             }
         });
-        thread.start();
+        thread.start(); 
     }
 
     private boolean isHardMap() {
         return (currentMapConfig != null) && (currentMapConfig.obstacleDensity >= 0.1);
     }
 
+    
     private List<Point> findSafePath(int sx, int sy, int ex, int ey, boolean gateBlocks) {
+        
         List<Point> path = map.findPath(sx, sy, ex, ey, gateBlocks, true);
         if (path != null) return path;
+        
+        
         return map.findPath(sx, sy, ex, ey, gateBlocks, false);
     }
 
+    
     private void planNextPath() {
+        
         class Step {
             String label;
             boolean valid;
@@ -145,6 +177,7 @@ public class ArthurGame extends JFrame {
             }
         }
 
+        
         List<Step> prioritas = Arrays.asList(
             new Step("Mencari jalur ke Kunci...", !map.keyTaken, new Point(map.keyX, map.keyY), true),
             new Step("Menuju gerbang...", map.keyTaken && !map.gateOpen, new Point(map.gateX, map.gateY), false),
@@ -153,39 +186,45 @@ public class ArthurGame extends JFrame {
 
         for (Step step : prioritas) {
             if (!step.valid) continue;
+            
             List<Point> p = findSafePath(player.tileX, player.tileY, step.goal.x, step.goal.y, step.gateBlocks);
             if (p != null && p.size() > 1) {
                 statusText = step.label;
-                player.setPath(p);
+                player.setPath(p); 
                 return;
             }
         }
     }
 
+    
     private int hazardLookahead() {
         return isHardMap() ? 12 : 7;
     }
 
+    
     private int shieldTriggerRange() {
         return isHardMap() ? 6 : 4;
     }
 
+    
     private double shieldDuration() {
-        return isHardMap() ? 2800.0 * 1.25 : 2800.0;
+        return isHardMap() ? 2800.0 * 1.25 : 2800.0; 
     }
 
+    
     private Point getNextHazardOnPath() {
         if (player.path == null || player.path.isEmpty()) return null;
         int end = Math.min(player.pathIndex + hazardLookahead(), player.path.size());
         for (int i = player.pathIndex; i < end; i++) {
             Point p = player.path.get(i);
             if (map.isLethal(p.x, p.y)) {
-                return new Point(i, i - player.pathIndex);
+                return new Point(i, i - player.pathIndex); 
             }
         }
         return null;
     }
 
+    
     private Integer findSafePathIndex(int fromIndex) {
         if (player.path == null) return null;
         for (int i = fromIndex; i < player.path.size(); i++) {
@@ -197,12 +236,14 @@ public class ArthurGame extends JFrame {
         return null;
     }
 
+    
     private void activateShield(String label) {
         player.activeShield = shieldDuration();
-        player.cdShield = 6000.0;
+        player.cdShield = 6000.0; 
         particles.addText(label, player.px + 32, player.py, Color.YELLOW);
     }
 
+    
     private void performBlinkToIndex(int targetIdx) {
         Point p = player.path.get(targetIdx);
         player.px = p.x * Constants.TILE_SIZE;
@@ -211,35 +252,43 @@ public class ArthurGame extends JFrame {
         player.tileY = p.y;
         player.pathIndex = targetIdx;
         player.activeBlink = 350.0;
-        player.cdBlink = 4000.0;
+        player.cdBlink = 4000.0; 
         particles.addText("AUTO BLINK!", player.px + 32, player.py, new Color(155, 89, 182));
     }
 
+    
     private boolean tryEmergencySkill() {
         if (player.isInvulnerable()) return true;
+        
+        
         if (player.cdShield <= 0) {
             activateShield("SHIELD DARURAT!");
             return true;
         }
+        
+        
         Integer safeIdx = findSafePathIndex(player.pathIndex + 1);
         if (safeIdx != null && safeIdx > player.pathIndex && player.cdBlink <= 0) {
             performBlinkToIndex(safeIdx);
             return true;
         }
+        
+        
         if (player.cdJump <= 0) {
             player.activeJump = 450.0;
-            player.cdJump = 2000.0;
+            player.cdJump = 2000.0; 
             particles.addText("JUMP DARURAT!", player.px + 32, player.py, new Color(46, 204, 113));
             return true;
         }
-        return false;
+        return false; 
     }
 
+    
     private double computeMoveSpeedMult() {
         if (player.isInvulnerable()) return 1.0;
         Point target = player.currentTargetTile();
         if (target != null && map.isLethal(target.x, target.y)) {
-            return isHardMap() ? 0.2 : 0.35;
+            return isHardMap() ? 0.2 : 0.35; 
         }
         Point hazard = getNextHazardOnPath();
         if (hazard == null) return 1.0;
@@ -249,9 +298,11 @@ public class ArthurGame extends JFrame {
         return 1.0;
     }
 
+    
     private void autoActivateSkills() {
         if (!gameState.equals("PLAYING") || player.path == null || player.path.isEmpty() || player.pathIndex >= player.path.size()) return;
 
+        
         if (map.isLethal(player.tileX, player.tileY)) {
             tryEmergencySkill();
             return;
@@ -263,6 +314,7 @@ public class ArthurGame extends JFrame {
         int index = hazard.x;
         int dist = hazard.y;
 
+        
         if (dist <= shieldTriggerRange() && player.cdShield <= 0) {
             activateShield("AUTO SHIELD!");
             return;
@@ -270,6 +322,7 @@ public class ArthurGame extends JFrame {
 
         if (player.isInvulnerable()) return;
 
+        
         if (dist <= 1) {
             if (player.cdShield <= 0) {
                 activateShield("AUTO SHIELD!");
@@ -288,6 +341,7 @@ public class ArthurGame extends JFrame {
             return;
         }
 
+        
         if (dist >= 2 && dist <= 8 && player.cdBlink <= 0) {
             Integer safeIdx = findSafePathIndex(index);
             if (safeIdx != null && safeIdx > player.pathIndex + 1) {
@@ -296,18 +350,22 @@ public class ArthurGame extends JFrame {
         }
     }
 
+    
     private void createNewGame(MapConfig config) {
         currentMapConfig = config;
         map = new GameMap(config.width, config.height, config.obstacleDensity);
         player = new Player(map.startX, map.startY);
-        player.speed = isHardMap() ? 130.0 : 180.0;
+        player.speed = isHardMap() ? 130.0 : 180.0; 
+        
         messageLog.clear();
         messageLog.add("--- LABIRIN DIMULAI ---");
         messageLog.add("3 skill siap - cari kunci lalu keluar!");
         statusText = "AI mencari jalan keluar...";
         runElapsedMs = 0;
         finalRunTimeMs = null;
-        planNextPath();
+        
+        planNextPath(); 
+        
         camX = player.px - getWidth() / 2.0;
         camY = player.py - getHeight() / 2.0;
         currentStoryIndex = 0;
@@ -315,54 +373,67 @@ public class ArthurGame extends JFrame {
         spacePressed = false;
     }
 
+    
     private void resetGame() {
         createNewGame(MAP_CONFIGS.get(currentMapSelectionIndex));
     }
 
+    
     private void onTileEntered(int tx, int ty) {
+        
         if (map.isLethal(tx, ty) && !player.isInvulnerable()) {
             int wasX = player.tileX;
             int wasY = player.tileY;
             if (!tryEmergencySkill()) {
-                gameState = "DEAD";
+                gameState = "DEAD"; 
                 messageLog.add("Arthur terkena jebakan!");
                 particles.addText("MATI!", player.px + Constants.TILE_SIZE / 2.0, player.py, new Color(231, 76, 60));
             } else if (player.tileX != wasX || player.tileY != wasY) {
-                onTileEntered(player.tileX, player.tileY);
+                onTileEntered(player.tileX, player.tileY); 
             }
             return;
         }
 
+        
         if (map.pickUpKey(tx, ty)) {
             messageLog.add("Kunci didapat! Kembali ke gerbang.");
             particles.addText("KUNCI!", player.px + Constants.TILE_SIZE / 2.0, player.py, new Color(241, 196, 15));
-            planNextPath();
-        } else if (tx == map.gateX && ty == map.gateY && map.keyTaken && !map.gateOpen) {
+            planNextPath(); 
+        } 
+        
+        else if (tx == map.gateX && ty == map.gateY && map.keyTaken && !map.gateOpen) {
             if (map.tryOpenGate(tx, ty, true)) {
                 messageLog.add("Gerbang terbuka!");
                 particles.addText("TERBUKA!", player.px + Constants.TILE_SIZE / 2.0, player.py, new Color(46, 204, 113));
-                planNextPath();
+                planNextPath(); 
             } else {
                 messageLog.add("Gerbang terkunci, butuh kunci!");
                 statusText = "Gerbang terkunci!";
                 planNextPath();
             }
-        } else if (map.isExit(tx, ty)) {
+        } 
+        
+        else if (map.isExit(tx, ty)) {
             if (gameState.equals("PLAYING")) {
                 finalRunTimeMs = runElapsedMs;
-                gameState = "WIN";
+                gameState = "WIN"; 
                 winTimer = 0;
                 messageLog.add("Sampai di EXIT! (" + formatRunTime(finalRunTimeMs) + ")");
             }
         }
     }
 
+    
     private void handleKeyDown(KeyEvent e) {
         int key = e.getKeyCode();
+        
+        
         if (key == KeyEvent.VK_ESCAPE) {
             if (gameState.equals("PLAYING")) gameState = "PAUSED";
             else if (gameState.equals("PAUSED")) gameState = "PLAYING";
         }
+        
+        
         if (gameState.equals("MAP_SELECT")) {
             if (key == KeyEvent.VK_LEFT || key == KeyEvent.VK_UP) {
                 currentMapSelectionIndex = Math.max(0, currentMapSelectionIndex - 1);
@@ -372,23 +443,28 @@ public class ArthurGame extends JFrame {
                 if (!spacePressed) {
                     spacePressed = true;
                     createNewGame(MAP_CONFIGS.get(currentMapSelectionIndex));
-                    gameState = "STORY";
+                    gameState = "STORY"; 
                 }
             }
             return;
         }
+        
+        
         if (gameState.equals("DEAD") && key == KeyEvent.VK_R) {
             resetGame();
             gameState = "MAP_SELECT";
             return;
         }
 
+        
         if (gameState.equals("PLAYING")) {
+            
             if (key == KeyEvent.VK_1 && player.cdJump <= 0) {
                 player.activeJump = 450.0;
                 player.cdJump = 2000.0;
                 particles.addText("JUMP!", player.px + 32, player.py, new Color(46, 204, 113));
             }
+            
             if (key == KeyEvent.VK_2 && player.cdBlink <= 0) {
                 Integer safeIdx = findSafePathIndex(player.pathIndex + 1);
                 if (safeIdx == null) {
@@ -398,6 +474,7 @@ public class ArthurGame extends JFrame {
                     performBlinkToIndex(safeIdx);
                 }
             }
+            
             if (key == KeyEvent.VK_3 && player.cdShield <= 0) {
                 player.activeShield = 2800.0;
                 player.cdShield = 6000.0;
@@ -405,17 +482,18 @@ public class ArthurGame extends JFrame {
             }
         }
 
+        
         if (key == KeyEvent.VK_SPACE || key == KeyEvent.VK_ENTER) {
             if (gameState.equals("STORY") && !spacePressed) {
                 spacePressed = true;
                 String line = storyLines.get(currentStoryIndex);
                 if (storyCharIndex < line.length()) {
-                    storyCharIndex = line.length();
+                    storyCharIndex = line.length(); 
                 } else {
                     currentStoryIndex++;
                     storyCharIndex = 0;
                     if (currentStoryIndex >= storyLines.size()) {
-                        gameState = "PLAYING";
+                        gameState = "PLAYING"; 
                         runElapsedMs = 0;
                         finalRunTimeMs = null;
                         planNextPath();
@@ -423,6 +501,8 @@ public class ArthurGame extends JFrame {
                 }
             }
         }
+        
+        
         if ((gameState.equals("WIN") || gameState.equals("PAUSED")) && key == KeyEvent.VK_R) {
             resetGame();
             gameState = "MAP_SELECT";
@@ -436,8 +516,10 @@ public class ArthurGame extends JFrame {
         }
     }
 
+    
     private void updateGame(double dt) {
         if (!gameState.equals("PLAYING")) {
+            
             if (gameState.equals("STORY")) {
                 storyTimer += dt;
                 if (storyTimer > 40.0) {
@@ -455,28 +537,39 @@ public class ArthurGame extends JFrame {
         }
 
         runElapsedMs += dt;
+        
+        
         autoActivateSkills();
-        player.moveSpeedMult = computeMoveSpeedMult();
+        
+        player.moveSpeedMult = computeMoveSpeedMult(); 
 
         int prevTileX = player.tileX;
         int prevTileY = player.tileY;
+        
+        
         player.update(dt);
+        
+        
         autoActivateSkills();
 
+        
         if (player.tileX != prevTileX || player.tileY != prevTileY) {
             onTileEntered(player.tileX, player.tileY);
         }
 
+        
         if (player.pathIndex >= player.path.size() && gameState.equals("PLAYING")) {
             if (!map.isExit(player.tileX, player.tileY)) {
                 planNextPath();
             }
         }
 
+        
         camX += (player.px - getWidth() / 2.0 - camX) * 0.1;
         camY += (player.py - getHeight() / 2.0 - camY) * 0.1;
     }
 
+    
     public static String formatRunTime(double ms) {
         double sec = ms / 1000.0;
         if (sec < 60.0) {
@@ -487,27 +580,36 @@ public class ArthurGame extends JFrame {
         return String.format(Locale.US, "%d menit %.1f detik", m, s);
     }
 
+    
     class GamePanel extends JPanel {
         GamePanel() {
             setBackground(Color.BLACK);
-            setDoubleBuffered(true);
+            setDoubleBuffered(true); 
         }
 
+        
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
             Graphics2D g2 = (Graphics2D) g;
+            
+            
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
             long time = System.currentTimeMillis();
 
+            
             if (!gameState.equals("MAP_SELECT")) {
+                
                 g2.translate(-Math.floor(camX), -Math.floor(camY));
+                
+                
                 map.draw(g2, camX, camY, getWidth(), getHeight(), time);
                 player.draw(g2, time);
-                particles.updateAndDraw(g2, 16.6);
+                particles.updateAndDraw(g2, 16.6); 
 
+                
                 Composite oldComp = g2.getComposite();
                 g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
 
@@ -523,11 +625,13 @@ public class ArthurGame extends JFrame {
                     g2.setPaint(p);
                     g2.fillRect((int) camX, (int) camY, getWidth(), getHeight());
                 } catch (Exception ex) {
+                    
                 }
 
-                g2.setTransform(new AffineTransform());
+                g2.setTransform(new AffineTransform()); 
             }
 
+            
             if (gameState.equals("STORY")) {
                 String typedText = storyLines.get(currentStoryIndex).substring(0, storyCharIndex);
                 renderStory(g2, typedText, time);
@@ -548,6 +652,7 @@ public class ArthurGame extends JFrame {
                 }
             }
 
+            
             g2.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 18));
             String fpsLabel = "FPS: " + fpsCurrent + " / target " + Constants.TARGET_FPS;
             g2.setColor(new Color(0, 0, 0, 140));
@@ -557,6 +662,7 @@ public class ArthurGame extends JFrame {
             g2.drawString(fpsLabel, getWidth() - 242, 26);
         }
 
+        
         private void renderStory(Graphics2D g, String text, long time) {
             g.setColor(Color.BLACK);
             g.fillRect(0, 0, getWidth(), 100);
@@ -576,12 +682,14 @@ public class ArthurGame extends JFrame {
             g.setColor(Color.WHITE);
             g.drawString(text, 120, getHeight() - 95);
 
+            
             if ((time / 500) % 2 == 0) {
                 g.setColor(new Color(170, 170, 170));
                 g.drawString("▼ Tekan [SPASI] ▼", getWidth() - 340, getHeight() - 60);
             }
         }
 
+        
         private void renderWin(Graphics2D g, double alpha, double elapsedMs) {
             g.setColor(new Color(5, 20, 10, (int) (alpha * 216)));
             g.fillRect(0, 0, getWidth(), getHeight());
@@ -589,7 +697,7 @@ public class ArthurGame extends JFrame {
             AffineTransform old = g.getTransform();
             g.translate(getWidth() / 2.0, getHeight() / 2.0);
             double s = Math.min(1.0, alpha * 2.0);
-            g.scale(s, s);
+            g.scale(s, s); 
 
             g.setColor(new Color(10, 31, 18));
             g.fillRoundRect(-240, -115, 480, 230, 10, 10);
@@ -618,6 +726,7 @@ public class ArthurGame extends JFrame {
             g.setTransform(old);
         }
 
+        
         private void renderDeathScreen(Graphics2D g, double elapsedMs) {
             g.setColor(new Color(50, 0, 0, 216));
             g.fillRect(0, 0, getWidth(), getHeight());
@@ -652,6 +761,7 @@ public class ArthurGame extends JFrame {
             g.setTransform(old);
         }
 
+        
         private void renderPauseScreen(Graphics2D g) {
             g.setColor(new Color(0, 0, 0, 150));
             g.fillRect(0, 0, getWidth(), getHeight());
@@ -663,6 +773,7 @@ public class ArthurGame extends JFrame {
             drawCenteredString(g, "Tekan [ESC] untuk Melanjutkan", getWidth() / 2, getHeight() / 2 + 40);
         }
 
+        
         private void renderMapSelectionScreen(Graphics2D g) {
             g.setColor(new Color(0, 0, 0, 230));
             g.fillRect(0, 0, getWidth(), getHeight());
@@ -676,6 +787,7 @@ public class ArthurGame extends JFrame {
                 boolean isSelected = i == currentMapSelectionIndex;
                 g.setColor(isSelected ? new Color(46, 204, 113) : new Color(236, 240, 241));
                 g.setFont(new Font(Font.MONOSPACED, isSelected ? Font.BOLD : Font.PLAIN, isSelected ? 36 : 32));
+                
                 String nameText = (isSelected ? "> " : "") + config.name + (isSelected ? " <" : "");
                 drawCenteredString(g, nameText, getWidth() / 2, getHeight() / 2 - 50 + (i * 60));
 
@@ -691,6 +803,7 @@ public class ArthurGame extends JFrame {
             }
         }
 
+        
         private void renderHUD(Graphics2D g) {
             g.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 20));
             int padding = 20;
@@ -703,17 +816,22 @@ public class ArthurGame extends JFrame {
 
             g.setColor(Constants.COLOR_UI_TEXT);
             g.drawString("Status: " + statusText, padding + 15, padding + 25);
+            
             g.setColor(map.keyTaken ? new Color(46, 204, 113) : new Color(127, 141, 141));
             g.drawString("Kunci: " + (map.keyTaken ? "DIMILIKI" : "BELUM"), padding + 15, padding + 50);
+            
             g.setColor(map.gateOpen ? new Color(46, 204, 113) : new Color(230, 126, 34));
             g.drawString("Gerbang: " + (map.gateOpen ? "TERBUKA" : "TERKUNCI"), padding + 160, padding + 50);
+            
             g.setColor(new Color(241, 196, 15));
             g.drawString("Waktu AI: " + formatRunTime(runElapsedMs), padding + 15, padding + 74);
 
+            
             int logCount = 4;
             int logHeight = logCount * 22 + 16;
             int logY = getHeight() - logHeight - padding;
             int logWidth = 360;
+            
             g.setColor(new Color(20, 20, 25, 190));
             g.fillRoundRect(getWidth() - logWidth - padding, logY, logWidth, logHeight, 8, 8);
             g.setColor(new Color(255, 255, 255, 51));
@@ -728,6 +846,7 @@ public class ArthurGame extends JFrame {
             }
         }
 
+        
         private void renderMinimap(Graphics2D g) {
             int cell = 6;
             int w = map.width * cell;
@@ -782,6 +901,7 @@ public class ArthurGame extends JFrame {
                 }
             }
 
+            
             int ppx = (int) (x0 + player.tileX * cell + cell / 2.0);
             int ppy = (int) (y0 + player.tileY * cell + cell / 2.0);
             g.setColor(new Color(52, 152, 219));
@@ -790,7 +910,9 @@ public class ArthurGame extends JFrame {
             g.drawOval(ppx - 3, ppy - 3, 6, 6);
         }
 
+        
         private void renderSkillCollection(Graphics2D g) {
+            
             class SkillDef {
                 String id;
                 String label;
@@ -880,7 +1002,9 @@ public class ArthurGame extends JFrame {
             drawCenteredString(g, "3 SKILL SIAP", getWidth() / 2, panelY + panelH + 6);
         }
 
+        
         private void renderSkillBar(Graphics2D g) {
+            
             class SkillInfo {
                 String id;
                 String key;
@@ -924,6 +1048,7 @@ public class ArthurGame extends JFrame {
                 g.setStroke(new BasicStroke(2));
                 g.drawRoundRect(startX, y, w, h, 8, 8);
 
+                
                 if (collected && cd > 0) {
                     g.setColor(new Color(231, 76, 60, 76));
                     int fillH = (int) (h * ratio);
@@ -948,6 +1073,7 @@ public class ArthurGame extends JFrame {
             }
         }
 
+        
         private void drawCenteredString(Graphics2D g, String text, int x, int y) {
             FontMetrics metrics = g.getFontMetrics(g.getFont());
             int xx = x - metrics.stringWidth(text) / 2;
@@ -956,10 +1082,11 @@ public class ArthurGame extends JFrame {
         }
     }
 
+    
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             ArthurGame game = new ArthurGame();
-            game.setVisible(true);
+            game.setVisible(true); 
         });
     }
 }
